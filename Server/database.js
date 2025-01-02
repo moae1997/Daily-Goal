@@ -1,5 +1,5 @@
 const pg = require('pg');
-const client = new pg.Client('postgres://localhost/daily_goal_db');
+const client = new pg.Client('postgres://localhost/dailygoal_db');
 const uuid = require('uuid');
 const bcrypt = require('bcrypt');
 
@@ -16,8 +16,7 @@ const createTables = async()=> {
       CREATE TABLE goals(
         id UUID PRIMARY KEY,
         goal VARCHAR(255),
-        user_id UUID REFERENCES users(id) NOT NULL,
-        CONSTRAINT unique_user UNIQUE (user_id)
+        user_id UUID REFERENCES users(id) NOT NULL
       );
     `;
     await client.query(SQL);
@@ -75,15 +74,28 @@ const createTables = async()=> {
   }
 
   const deleteUser = async({ user_id })=> {
-    const SQL = `
-      DELETE FROM users WHERE id=$1;
-    `;
-    await client.query(SQL, [user_id]);
+    try {
+      const hasRelatedGoals = await client.query(
+        `SELECT EXISTS (SELECT 1 FROM goals WHERE user_id = $1)`,
+        [user_id]
+      );
+  
+      if (hasRelatedGoals.rows[0].exists) {
+        throw new Error("Cannot delete user. Associated goals exist.");
+      }
+  
+      const SQL = `DELETE FROM users WHERE id = $1`;
+      await client.query(SQL, [user_id]);
+  
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      throw error;
+    }
   };
 
   const deleteGoals = async({ user_id })=> {
     const SQL = `
-      DELETE FROM goals WHERE id=$1;
+      DELETE FROM goals WHERE user_id=$1;
     `;
     await client.query(SQL, [user_id]);
   };

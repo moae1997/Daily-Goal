@@ -1,22 +1,25 @@
 const {client, createTables, createUser, createGoal, knockoutGoal, fetchUser, fetchGoals, updateGoal, deleteUser, deleteGoals} = require('./database');
 const express = require('express');
+const cors = require('cors');
 const app = express();
 app.use(express.json());
+app.use(cors());
 const jwt = require("jsonwebtoken");
-const SECRET = "fmyumchsymxgnbfgtmugfnym";
+require('dotenv').config();
+const bcrypt = require('bcrypt');
 
 
 
 
 app.post('/api/register', async(req,res,next)=> {
     try {
-        const checkCustomer = await fetchUser(req.body.email);
-        if(!checkCustomer) {
-            const newCostomer = await createUser(req.body);
-        const token = jwt.sign(newCostomer.id, SECRET);
-        res.send({token, newCostomer});
+        const checkUser = await fetchUser(req.body.email);
+        if(!checkUser) {
+            const newUser = await createUser(req.body);
+        const token = jwt.sign(newUser.id, process.env.SECRET);
+        res.send({token, newUser});
         } else {
-            res.send("try logging in!")
+            res.send("User already exists!")
         }
     } catch(ex){
         next(ex); 
@@ -25,18 +28,36 @@ app.post('/api/register', async(req,res,next)=> {
 
 app.post('/api/login', async(req,res,next)=> {
     try {
-        const checkCustomer = await fetchUser(req.body.email);
-        if(!checkCustomer) {
-            res.send("Sorry, you are not a user, try signing up");
-        } else if (!(await bcrypt.compare(req.body.password, checkCustomer.password))) {
-            res.send("try logging in!")
+        const checkUser = await fetchUser(req.body.email);
+        if(!checkUser) {
+            res.send("Login failed");
+        } else if (!(await bcrypt.compare(req.body.password, checkUser.password))) {
+            res.send("Login failed");
         } else {
-            const token = jwt.sign(checkCustomer.id, SECRET);
-            res.send({token, checkCustomer});
+            const token = jwt.sign(checkUser.id, process.env.SECRET);
+            res.send({token, checkUser});
         }
     } catch(ex){
         next(ex); 
     } 
+});
+
+app.get('/api/auth', async(req,res,next)=>{
+  try {
+      const token = req.headers['authorization'].split(' ')[1];
+      if (!token) {
+          res.send("request failed");
+      }
+      jwt.verify(token, process.env.SECRET, (err, decoded)=>{
+        if (err) {
+         res.sendStatus(403);
+        }
+        res.send(decoded);
+      });
+  } catch(ex){
+    next(ex);
+  }
+
 });
 
 app.post('/api/user/:id/goal', async(req, res, next)=> {
@@ -59,7 +80,7 @@ app.get('/api/:id/mygoals', async(req, res, next)=> {
 
 app.patch('/api/goal/:id', async(req, res, next)=>{
     try {
-        res.status(201).send(await updateGoal({goal_id: req.params.id, goal: req.body.goal}));
+        res.status(201).send(await updateGoal({goal_id: req.params.id, goal: req.body.fixedGoal}));
     } catch(ex){
         next(ex);
     }
@@ -85,7 +106,7 @@ app.delete('/api/user/:userId/goal/:id', async(req, res, next)=> {
           }
   });
 
-  app.delete('/api/user/:userID', async(req, res, next)=> {
+  app.delete('/api/goal/:userID', async(req, res, next)=> {
     try {
         await deleteGoals({ user_id: req.params.userID });
         res.sendStatus(204);
